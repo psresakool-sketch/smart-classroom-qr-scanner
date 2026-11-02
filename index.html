@@ -1,1 +1,133 @@
 
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SMART CLASSROOM QR SCANNER</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+    }
+
+    .container {
+      max-width: 520px;
+      margin: 30px auto;
+      padding: 24px;
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 5px 25px #00000012;
+      text-align: center;
+    }
+
+    h2 { margin-top: 0; }
+
+    .subtitle {
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button.stop { background: #dc2626; }
+
+    #reader {
+      width: 100%;
+      margin-top: 18px;
+    }
+
+    #result {
+      margin-top: 18px;
+      padding: 14px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>SMART CLASSROOM QR</h2>
+    <p class="subtitle">ระบบสแกน QR Code นักเรียน</p>
+
+    <button onclick="startScanner()">📷 เปิดกล้องสแกน QR</button>
+    <button class="stop" onclick="stopScanner()">ปิดกล้อง</button>
+
+    <div id="reader"></div>
+
+    <div id="result">
+      กรุณากดเปิดกล้องเพื่อเริ่มสแกน
+    </div>
+  </div>
+
+  <script>
+    let scanner = null;
+    let isScanning = false;
+
+    function startScanner() {
+      if (isScanning) return;
+
+      document.getElementById("result").textContent =
+        "กำลังเปิดกล้อง...";
+
+      scanner = new Html5Qrcode("reader");
+
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+
+        function(decodedText) {
+          document.getElementById("result").textContent =
+            "อ่าน QR สำเร็จแล้ว";
+
+          stopScanner();
+        },
+
+        function(error) {
+          // ระหว่างค้นหา QR ไม่ต้องแสดงข้อความ
+        }
+
+      ).then(function() {
+        isScanning = true;
+        document.getElementById("result").textContent =
+          "กำลังสแกน QR Code...";
+      }).catch(function(error) {
+        document.getElementById("result").textContent =
+          "เปิดกล้องไม่สำเร็จ: " + error;
+      });
+    }
+
+    function stopScanner() {
+      if (scanner && isScanning) {
+        scanner.stop().then(function() {
+          scanner.clear();
+          isScanning = false;
+        }).catch(function(error) {
+          console.error(error);
+        });
+      }
+    }
+  </script>
+</body>
+</html>
+
