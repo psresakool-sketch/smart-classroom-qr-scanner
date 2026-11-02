@@ -79,55 +79,90 @@
       กรุณากดเปิดกล้องเพื่อเริ่มสแกน
     </div>
   </div>
+<script>
+  let scanner = null;
+  let isScanning = false;
+  let isSending = false;
 
-  <script>
-    let scanner = null;
-    let isScanning = false;
+  function startScanner() {
+    if (isScanning) return;
 
-    function startScanner() {
-      if (isScanning) return;
+    document.getElementById("result").textContent =
+      "กำลังเปิดกล้อง...";
 
-      document.getElementById("result").textContent =
-        "กำลังเปิดกล้อง...";
+    scanner = new Html5Qrcode("reader");
 
-      scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
 
-      scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+      function(decodedText) {
+        if (isSending) return;
+        isSending = true;
 
-        function(decodedText) {
-          document.getElementById("result").textContent =
-            "อ่าน QR สำเร็จแล้ว";
-
-          stopScanner();
-        },
-
-        function(error) {
-          // ระหว่างค้นหา QR ไม่ต้องแสดงข้อความ
-        }
-
-      ).then(function() {
-        isScanning = true;
         document.getElementById("result").textContent =
-          "กำลังสแกน QR Code...";
+          "อ่าน QR สำเร็จ กำลังส่งข้อมูลกลับ...";
+
+        scanner.stop().then(function() {
+          isScanning = false;
+          scanner.clear();
+
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(
+              {
+                type: "SMART_CLASSROOM_QR",
+                qrToken: decodedText
+              },
+              "*"
+            );
+
+            document.getElementById("result").textContent =
+              "ส่งรหัสกลับหน้าเช็คชื่อแล้ว สามารถปิดหน้านี้ได้";
+
+            setTimeout(function() {
+              window.close();
+            }, 1200);
+
+          } else {
+            document.getElementById("result").textContent =
+              "อ่าน QR ได้แล้ว แต่ไม่พบหน้า SMART CLASSROOM QR ที่เปิดหน้านี้";
+          }
+
+        }).catch(function(error) {
+          isSending = false;
+          document.getElementById("result").textContent =
+            "หยุดกล้องไม่สำเร็จ: " + error;
+        });
+      },
+
+      function(error) {
+        // ไม่ต้องแสดงข้อความระหว่างค้นหา QR
+      }
+
+    ).then(function() {
+      isScanning = true;
+      document.getElementById("result").textContent =
+        "กำลังสแกน QR Code...";
+    }).catch(function(error) {
+      document.getElementById("result").textContent =
+        "เปิดกล้องไม่สำเร็จ: " + error;
+    });
+  }
+
+  function stopScanner() {
+    if (scanner && isScanning) {
+      scanner.stop().then(function() {
+        scanner.clear();
+        isScanning = false;
+        document.getElementById("result").textContent =
+          "ปิดกล้องแล้ว";
       }).catch(function(error) {
         document.getElementById("result").textContent =
-          "เปิดกล้องไม่สำเร็จ: " + error;
+          "ปิดกล้องไม่สำเร็จ: " + error;
       });
     }
-
-    function stopScanner() {
-      if (scanner && isScanning) {
-        scanner.stop().then(function() {
-          scanner.clear();
-          isScanning = false;
-        }).catch(function(error) {
-          console.error(error);
-        });
-      }
-    }
-  </script>
+  }
+</script>
 </body>
 </html>
 
