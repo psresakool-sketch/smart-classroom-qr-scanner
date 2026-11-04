@@ -81,136 +81,230 @@
   </div>
 
 <script>
-  let scanner = null;
-  let isScanning = false;
-  let isSending = false;
-  let lastSentToken = "";
-  let lastSentAt = 0;
 
-  const resultBox = document.getElementById("result");
+let scanner = null;
+let isScanning = false;
+let isSending = false;
+let lastSentToken = "";
+let lastSentAt = 0;
+let pendingRequestId = null;
+let responseTimeout = null;
 
-  async function startScanner() {
-    if (isScanning) return;
+const resultBox = document.getElementById("result");
 
-    if (typeof Html5Qrcode === "undefined") {
-      resultBox.textContent =
-        "โหลดระบบสแกนไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้าเว็บ";
-      return;
-    }
+function showResult(title, detail, success) {
+  resultBox.replaceChildren();
 
-    resultBox.textContent = "กำลังเปิดกล้อง...";
+  const heading = document.createElement("div");
+  heading.textContent = title;
+  heading.style.fontSize = "20px";
+  heading.style.fontWeight = "bold";
+  heading.style.marginBottom = "6px";
 
-    try {
-      scanner = new Html5Qrcode("reader", {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128
-        ]
-      });
+  const message = document.createElement("div");
+  message.textContent = detail || "";
+  message.style.whiteSpace = "pre-wrap";
 
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: function(viewWidth, viewHeight) {
-            return {
-              width: Math.min(viewWidth, 320),
-              height: Math.min(viewHeight, 220)
-            };
-          }
-        },
-        handleScan,
-        function(error) {
-          // ไม่แสดงข้อความระหว่างที่กล้องกำลังค้นหารหัส
+  resultBox.style.color = success ? "#15803d" : "#dc2626";
+  resultBox.appendChild(heading);
+  resultBox.appendChild(message);
+}
+
+async function startScanner() {
+  if (isScanning) return;
+
+  if (typeof Html5Qrcode === "undefined") {
+    resultBox.textContent =
+      "โหลดระบบสแกนไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้าเว็บ";
+    return;
+  }
+
+  resultBox.textContent = "กำลังเปิดกล้อง...";
+
+  try {
+    scanner = new Html5Qrcode("reader", {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128
+      ]
+    });
+
+    await scanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: function(viewWidth, viewHeight) {
+          return {
+            width: Math.min(viewWidth, 320),
+            height: Math.min(viewHeight, 220)
+          };
         }
-      );
+      },
+      handleScan,
+      function(error) {}
+    );
 
-      isScanning = true;
-      resultBox.textContent =
-        "กล้องพร้อมใช้งาน — สแกนนักเรียนคนแรกได้เลย";
+    isScanning = true;
+    resultBox.textContent =
+      "กล้องพร้อมใช้งาน — สแกนนักเรียนคนแรกได้เลย";
 
-    } catch (error) {
-      isScanning = false;
-
-      try {
-        if (scanner) await scanner.clear();
-      } catch (_) {}
-
-      scanner = null;
-      resultBox.textContent =
-        "เปิดกล้องไม่สำเร็จ: " + error;
-    }
-  }
-
-  function handleScan(decodedText) {
-    const token = String(decodedText || "").trim();
-    if (!token || !isScanning || isSending) return;
-
-    const now = Date.now();
-
-    // ป้องกันการอ่านรหัสเดิมซ้ำภายใน 2.5 วินาที
-    if (
-      token === lastSentToken &&
-      now - lastSentAt < 2500
-    ) {
-      return;
-    }
-
-    if (!window.opener || window.opener.closed) {
-      resultBox.textContent =
-        "ไม่พบหน้า SMART CLASSROOM ที่เปิด Scanner นี้ กรุณาเปิด Scanner จากหน้า Apps Script";
-      return;
-    }
-
-    isSending = true;
-    lastSentToken = token;
-    lastSentAt = now;
+  } catch (error) {
+    isScanning = false;
 
     try {
-      window.opener.postMessage(
-        {
-          type: "SMART_CLASSROOM_QR",
-          qrToken: token
-        },
-        "*"
-      );
+      if (scanner) await scanner.clear();
+    } catch (_) {}
 
-      resultBox.textContent =
-        "ส่งรหัสสำเร็จแล้ว ✓\nพร้อมสแกนนักเรียนคนถัดไป";
+    scanner = null;
+    resultBox.textContent =
+      "เปิดกล้องไม่สำเร็จ: " + error;
+  }
+}
 
-    } catch (error) {
-      resultBox.textContent =
-        "ส่งข้อมูลกลับไม่สำเร็จ: " + error;
+function handleScan(decodedText) {
+  const token = String(decodedText || "").trim();
 
-    } finally {
-      // ปลดล็อกเพื่อให้รับรหัสคนถัดไปได้
-      setTimeout(function() {
-        isSending = false;
-      }, 700);
-    }
+  if (!token || !isScanning || isSending) return;
+
+  const now = Date.now();
+
+  if (
+    token === lastSentToken &&
+    now - lastSentAt < 2500
+  ) {
+    return;
   }
 
-  async function stopScanner() {
-    if (!scanner || !isScanning) {
-      resultBox.textContent = "กล้องปิดอยู่";
-      return;
-    }
+  if (!window.opener || window.opener.closed) {
+    resultBox.textContent =
+      "ไม่พบหน้า SMART CLASSROOM ที่เปิด Scanner นี้ กรุณาเปิด Scanner จากหน้า Apps Script";
+    return;
+  }
 
-    try {
-      await scanner.stop();
-      await scanner.clear();
+  isSending = true;
+  lastSentToken = token;
+  lastSentAt = now;
 
-      scanner = null;
-      isScanning = false;
+  pendingRequestId =
+    Date.now() + "-" + Math.random().toString(36).slice(2);
+
+  resultBox.style.color = "#1d4ed8";
+  resultBox.textContent =
+    "กำลังบันทึกข้อมูล...\nกรุณารอผลยืนยันจาก Apps Script";
+
+  try {
+    window.opener.postMessage(
+      {
+        type: "SMART_CLASSROOM_QR",
+        qrToken: token,
+        requestId: pendingRequestId
+      },
+      "*"
+    );
+
+    // รอผลตอบกลับไม่เกิน 20 วินาที
+    responseTimeout = setTimeout(function() {
+      if (!pendingRequestId) return;
+
+      showResult(
+        "⚠ ยังไม่ได้รับผลยืนยัน",
+        "กรุณาตรวจสอบหน้า Apps Script ก่อนสแกนรหัสนี้ซ้ำ",
+        false
+      );
+
       isSending = false;
+      pendingRequestId = null;
+      responseTimeout = null;
 
-      resultBox.textContent = "ปิดกล้องแล้ว";
+    }, 20000);
 
-    } catch (error) {
-      resultBox.textContent =
-        "ปิดกล้องไม่สำเร็จ: " + error;
-    }
+  } catch (error) {
+    showResult(
+      "✕ ส่งข้อมูลไม่สำเร็จ",
+      String(error),
+      false
+    );
+
+    isSending = false;
+    pendingRequestId = null;
   }
+}
+
+// รับผลยืนยันจากหน้า Apps Script
+window.addEventListener("message", function(event) {
+  if (event.source !== window.opener) return;
+
+  const allowedGoogleOrigin =
+    event.origin === "https://script.google.com" ||
+    event.origin === "https://script.googleusercontent.com" ||
+    event.origin.endsWith(".googleusercontent.com");
+
+  if (!allowedGoogleOrigin) return;
+
+  const data = event.data;
+
+  if (
+    !data ||
+    typeof data !== "object" ||
+    data.type !== "SMART_CLASSROOM_QR_RESULT"
+  ) return;
+
+  if (
+    !pendingRequestId ||
+    data.requestId !== pendingRequestId
+  ) return;
+
+  if (responseTimeout) {
+    clearTimeout(responseTimeout);
+    responseTimeout = null;
+  }
+
+  if (data.success) {
+    showResult(
+      "✓ " + (data.title || "บันทึกสำเร็จ"),
+      "นักเรียน: " + (data.studentName || "ไม่ระบุชื่อ") +
+      "\n" + (data.message || ""),
+      true
+    );
+  } else {
+    showResult(
+      "✕ " + (data.title || "บันทึกไม่สำเร็จ"),
+      data.message || "เกิดข้อผิดพลาด",
+      false
+    );
+  }
+
+  isSending = false;
+  pendingRequestId = null;
+});
+
+async function stopScanner() {
+  if (!scanner || !isScanning) {
+    resultBox.textContent = "กล้องปิดอยู่";
+    return;
+  }
+
+  try {
+    await scanner.stop();
+    await scanner.clear();
+
+    scanner = null;
+    isScanning = false;
+    isSending = false;
+    pendingRequestId = null;
+
+    if (responseTimeout) {
+      clearTimeout(responseTimeout);
+      responseTimeout = null;
+    }
+
+    resultBox.textContent = "ปิดกล้องแล้ว";
+
+  } catch (error) {
+    resultBox.textContent =
+      "ปิดกล้องไม่สำเร็จ: " + error;
+  }
+}
 </script>
 </body>
 </html>
